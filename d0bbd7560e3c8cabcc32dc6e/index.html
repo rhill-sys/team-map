@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="robots" content="noindex, nofollow">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Soccer Team — Where the Families Live</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.heat/0.2.0/leaflet-heat.js"></script>
+<style>
+  :root {
+    color-scheme: light;
+    --surface-1: #fcfcfb;
+    --page: #f9f9f7;
+    --text-primary: #0b0b0b;
+    --text-secondary: #52514e;
+    --muted: #898781;
+    --hairline: #e1e0d9;
+    --border: rgba(11,11,11,0.10);
+    --seq-100: #cde2fb;
+    --seq-200: #9ec5f4;
+    --seq-350: #5598e7;
+    --seq-450: #2a78d6;
+    --seq-700: #0d366b;
+    --pin: #2a78d6;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--page);
+    color: var(--text-primary);
+    display: flex;
+    flex-direction: column;
+  }
+  header {
+    padding: 14px 18px 10px;
+    background: var(--surface-1);
+    border-bottom: 1px solid var(--hairline);
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 6px 16px;
+  }
+  header h1 { font-size: 16px; font-weight: 650; margin: 0; }
+  header .sub { font-size: 12.5px; color: var(--text-secondary); }
+  .controls {
+    margin-left: auto;
+    display: flex;
+    gap: 14px;
+    align-items: center;
+    font-size: 12.5px;
+    color: var(--text-secondary);
+  }
+  .controls label { display: flex; align-items: center; gap: 5px; cursor: pointer; user-select: none; }
+  .controls input { accent-color: var(--seq-450); }
+  #map { flex: 1; min-height: 0; }
+  .legend {
+    background: var(--surface-1);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 10px;
+    font: 11.5px/1.35 system-ui, -apple-system, "Segoe UI", sans-serif;
+    color: var(--text-secondary);
+    box-shadow: 0 1px 4px rgba(11,11,11,0.08);
+  }
+  .legend .bar {
+    height: 8px; width: 130px; border-radius: 4px; margin: 5px 0 3px;
+    background: linear-gradient(90deg, var(--seq-100), var(--seq-200), var(--seq-350), var(--seq-450), var(--seq-700));
+  }
+  .legend .ends { display: flex; justify-content: space-between; font-size: 10.5px; color: var(--muted); }
+  .fam-label {
+    background: var(--surface-1);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    box-shadow: 0 1px 3px rgba(11,11,11,0.10);
+    padding: 1px 6px;
+    font: 600 11px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+    color: var(--text-primary);
+    white-space: nowrap;
+  }
+  .fam-label::before { display: none; }
+  .leaflet-popup-content { font: 12.5px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; margin: 10px 12px; }
+  .leaflet-popup-content b { font-weight: 650; }
+  .leaflet-popup-content .addr { color: var(--text-secondary); }
+  footer {
+    padding: 6px 18px;
+    background: var(--surface-1);
+    border-top: 1px solid var(--hairline);
+    font-size: 11px;
+    color: var(--muted);
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>Where the Team Lives</h1>
+  <span class="sub" id="count"></span>
+  <div class="controls">
+    <label><input type="checkbox" id="tHeat" checked> Heat</label>
+    <label><input type="checkbox" id="tPins" checked> Pins</label>
+    <label><input type="checkbox" id="tNames" checked> Names</label>
+  </div>
+</header>
+<div id="map"></div>
+<footer>Geocoded from street addresses (US Census). Arzuman is placed at the 13-hundred block of Saddle River Rd — Fair Lawn uses hyphenated house numbers, so it's approximate.</footer>
+<script>
+  const families = [
+    { name: "Hill",     addr: "34 Godfrey Rd, Montclair",            lat: 40.836142, lon: -74.211250 },
+    { name: "Hirsch",   addr: "212 N Mountain Ave, Montclair",       lat: 40.832317, lon: -74.214888 },
+    { name: "Morais",   addr: "189 Webster Dr, Wayne",               lat: 40.951238, lon: -74.264747 },
+    { name: "Gabriele", addr: "319 Park Ave, Nutley",                lat: 40.813681, lon: -74.152725 },
+    { name: "Reitsma",  addr: "42 Van Duyne Ave, Wayne",             lat: 40.910847, lon: -74.259975 },
+    { name: "Paskoski", addr: "42 Northwood Dr, West Milford",       lat: 41.024248, lon: -74.373160 },
+    { name: "Valdivia", addr: "910 Broad St, Clifton",               lat: 40.865128, lon: -74.172141 },
+    { name: "Baldino",  addr: "34 Grandview Dr, Wayne",              lat: 40.960209, lon: -74.249089 },
+    { name: "Wepsiec",  addr: "107 Grove St, Waldwick",              lat: 41.012134, lon: -74.109949 },
+    { name: "Punla",    addr: "4 Maysey Ct, Denville",               lat: 40.872548, lon: -74.488536 },
+    { name: "Arzuman",  addr: "13 Saddle River Rd, Fair Lawn (approx.)", lat: 40.941971, lon: -74.099595 },
+    { name: "Farhat",   addr: "52 Center Court, Garfield",           lat: 40.888901, lon: -74.117114 }
+  ];
+  document.getElementById("count").textContent = families.length + " families · Montclair to West Milford, NJ";
+
+  const map = L.map("map", { zoomSnap: 0.25 });
+  L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", {
+    maxZoom: 19,
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
+  }).addTo(map);
+
+  const bounds = L.latLngBounds(families.map(f => [f.lat, f.lon]));
+  map.fitBounds(bounds.pad(0.12));
+
+  // Heat layer — single-hue sequential ramp (light -> dark blue)
+  const heat = L.heatLayer(families.map(f => [f.lat, f.lon, 1]), {
+    radius: 50,
+    blur: 32,
+    minOpacity: 0.3,
+    max: 1.5,
+    gradient: { 0.15: "#cde2fb", 0.35: "#9ec5f4", 0.55: "#5598e7", 0.75: "#2a78d6", 1.0: "#0d366b" }
+  }).addTo(map);
+
+  // Pins + name labels
+  const pins = L.layerGroup();
+  const names = L.layerGroup();
+  families.forEach(f => {
+    const m = L.circleMarker([f.lat, f.lon], {
+      radius: 6, color: "#fcfcfb", weight: 2, fillColor: "#0d366b", fillOpacity: 0.95
+    }).bindPopup("<b>" + f.name + "</b><br><span class='addr'>" + f.addr + "</span>");
+    pins.addLayer(m);
+    names.addLayer(L.marker([f.lat, f.lon], {
+      icon: L.divIcon({ className: "", html: "<div class='fam-label'>" + f.name + "</div>", iconAnchor: [-8, 20] }),
+      interactive: false, keyboard: false
+    }));
+  });
+  pins.addTo(map);
+  names.addTo(map);
+
+  // Legend
+  const legend = L.control({ position: "bottomright" });
+  legend.onAdd = function () {
+    const div = L.DomUtil.create("div", "legend");
+    div.innerHTML = "Family density<div class='bar'></div><div class='ends'><span>fewer</span><span>more</span></div>";
+    return div;
+  };
+  legend.addTo(map);
+
+  // Toggles
+  const wire = (id, layer) => document.getElementById(id).addEventListener("change", e =>
+    e.target.checked ? map.addLayer(layer) : map.removeLayer(layer));
+  wire("tHeat", heat);
+  wire("tPins", pins);
+  wire("tNames", names);
+</script>
+</body>
+</html>
